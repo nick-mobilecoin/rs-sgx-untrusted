@@ -16,6 +16,7 @@ fn main() {
         .header_contents("status.h", "#include <sgx_error.h>\n#include <sgx_urts.h>")
         .clang_arg("-I/opt/intel/sgxsdk/include")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        // See https://github.com/rust-lang/rust-bindgen/issues/1651 for disabling tests
         .layout_tests(false)
         .generate()
         .expect("Unable to generate bindings");
