@@ -4,6 +4,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use cc::Build;
 use std::process::Command;
+use cargo_emit::warning;
 
 struct EdgerFiles {
     trusted: PathBuf,
@@ -23,7 +24,11 @@ fn main() {
 
 fn generate_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r").current_dir(&out_path).arg(edl_file.as_ref().as_os_str()).output().expect("Failed to run edger8r");
+    warning!("The output path is {:?}", out_path);
+    let mut command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r");
+    command.current_dir(&out_path).arg(edl_file.as_ref().as_os_str());
+    warning!("The command is {:?}", command);
+    command.output().expect("Failed to run edger8r");
     let basename = edl_file.as_ref().file_stem().unwrap().to_str().unwrap();
 
     let mut trusted = out_path.clone();
