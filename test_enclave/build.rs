@@ -14,23 +14,23 @@ static EDGER_FILE: &str = "src/enclave.edl";
 static ENCLAVE_FILE: &str = "src/enclave.c";
 
 fn main() {
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let mut enclave_config = out_path.clone();
-    enclave_config.set_file_name("enclave.lds");
     let edger_files = generate_enclave_definitions(EDGER_FILE);
 
-    generate_enclave_binary([ENCLAVE_FILE, edger_files.trusted]);
+    generate_enclave_binary([PathBuf::from(ENCLAVE_FILE), edger_files.trusted]);
 
     generate_untrusted_library(edger_files.untrusted);
 }
 
 fn generate_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r").current_dir(out_path).arg(&edl_file);
-    command.output().expect("Failed to run edger8r");
-    let basename = edl_file.file_prefix().unwrap();
-    let trusted = PathBuf::from(&edl_file).set_file_name(format!("{}_t.c", basename)).unwrap();
-    let untrusted = PathBuf::from(&edl_file).set_file_name(format!("{}_u.c", basename)).unwrap();
+    Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r").current_dir(&out_path).arg(edl_file.as_ref().as_os_str()).output().expect("Failed to run edger8r");
+    let basename = edl_file.as_ref().file_stem().unwrap().to_str().unwrap();
+
+    let mut trusted = out_path.clone();
+    trusted.set_file_name(format!("{}_t.c", basename));
+    let mut untrusted = out_path.clone();
+    untrusted.set_file_name(format!("{}_u.c", basename));
+
     EdgerFiles{trusted, untrusted}
 }
 
@@ -39,12 +39,16 @@ fn generate_enclave_binary<P>(files: P) -> PathBuf
         P: IntoIterator,
         P::Item: AsRef<Path>, {
 
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let mut enclave_config = out_path.clone();
+    enclave_config.set_file_name("enclave.lds");
+
     Build::new().files(files)
         .flag("-Wl,--no-undefined")
         .flag("-nostdlib")
         .flag("-nodefaultlibs")
         .flag("-nostartfiles")
-        .flag("-LSGX_TRUSTED_LIBRARY_PATH")
+        .flag(&format!("-L{}", SGX_TRUSTED_LIBRARY_PATH))
         .flag("-Wl,--whole-archive").flag("-lsgx_trts_sim").flag("-Wl,--no-whole-archive")
         .flag("-lsgx_tstdc").flag("-lsgx_tcxx").flag("-lsgx_crypto_sim").flag("-lsgx_service_sim")
         .flag("-Wl,-Bstatic").flag("-Wl,-Bsymbolic").flag("-Wl,--no-undefined")
