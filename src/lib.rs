@@ -25,17 +25,17 @@ pub struct Enclave {
 }
 
 impl Enclave {
-    fn new(filename: &str) -> Enclave {
+    pub fn new(filename: &str) -> Enclave {
         let filename = CString::new(filename).expect("Can't convert enclave filename to CString.");
         Enclave{filename, ..Default::default()}
     }
 
-    fn debug(&mut self, debug: bool) -> &mut Enclave {
+    pub fn debug(&mut self, debug: bool) -> &mut Enclave {
         self.debug = debug;
         self
     }
 
-    fn create(&mut self) -> sgx_status_t {
+    pub fn create(&mut self) -> sgx_status_t {
         let mut launch_token: sgx_launch_token_t = [0; 1024];
         let mut launch_token_updated: c_int = 0;
         let mut misc_attr: sgx_misc_attribute_t = unsafe{ MaybeUninit::<sgx_misc_attribute_t>::zeroed().assume_init() };
