@@ -78,7 +78,7 @@ fn sign_enclave_binary<P: AsRef<Path>>(unsigned_enclave: P) -> PathBuf {
 
     let mut command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_sign");
     command.arg("sign") .arg("-enclave") .arg(unsigned_enclave.as_ref())
-        .arg("-config") .arg("")
+        .arg("-config") .arg("config.xml")
         .arg("-key") .arg("signing_key.pem")
         .arg("-out") .arg(&signed_binary);
     let status = command.status().expect("Failed to execute enclave signer");
