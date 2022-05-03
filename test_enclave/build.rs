@@ -13,11 +13,16 @@ struct EdgerFiles {
 static SGX_TRUSTED_LIBRARY_PATH: &str = "/opt/intel/sgxsdk/lib64";
 static EDGER_FILE: &str = "src/enclave.edl";
 static ENCLAVE_FILE: &str = "src/enclave.c";
+const CURRENT_FILE: &'static str = concat!(env!("CARGO_MANIFEST_DIR"), "/", "..", "/", file!());
 
 fn main() {
-    let edger_files = generate_enclave_definitions(EDGER_FILE);
+    warning!("THe current file is {:?}", CURRENT_FILE);
+    let current_file = PathBuf::from(CURRENT_FILE);
+    let root_path = current_file.parent().unwrap();
+    warning!("THe current dir is {:?}", root_path);
+    let edger_files = generate_enclave_definitions(PathBuf::from(&root_path).join(EDGER_FILE));
 
-    generate_enclave_binary([PathBuf::from(ENCLAVE_FILE), edger_files.trusted]);
+    generate_enclave_binary([PathBuf::from(root_path).join(ENCLAVE_FILE), edger_files.trusted]);
 
     generate_untrusted_library(edger_files.untrusted);
 }
