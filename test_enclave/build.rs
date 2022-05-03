@@ -14,7 +14,6 @@ static SGX_TRUSTED_LIBRARY_PATH: &str = "/opt/intel/sgxsdk/lib64";
 static EDGER_FILE: &str = "src/enclave.edl";
 static ENCLAVE_FILE: &str = "src/enclave.c";
 const CURRENT_FILE: &'static str = concat!(env!("CARGO_MANIFEST_DIR"), "/", "..", "/", file!());
-const OUT_DIR: &'static str = env!(OUT_DIR);
 
 fn main() {
     let current_file = PathBuf::from(CURRENT_FILE);
@@ -27,7 +26,7 @@ fn main() {
 }
 
 fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
-    let out_path = PathBuf::from(OUT_DIR).unwrap();
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let mut command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r");
     command.current_dir(&out_path).arg(edl_file.as_ref().as_os_str());
     let status = command.status().expect("Failed to run edger8r");
@@ -48,9 +47,9 @@ fn create_enclave_binary<P>(files: P) -> PathBuf
         P: IntoIterator,
         P::Item: AsRef<Path>, {
 
-    let out_path = PathBuf::from(OUT_DIR).unwrap();
-    let mut enclave_config = out_path.clone();
-    enclave_config.set_file_name("enclave.lds");
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let mut version_script = out_path.clone();
+    version_script.set_file_name("enclave.lds");
 
     Build::new().files(files)
         .include("/opt/intel/sgxsdk/include")
@@ -65,12 +64,30 @@ fn create_enclave_binary<P>(files: P) -> PathBuf
         .flag("-Wl,-Bstatic").flag("-Wl,-Bsymbolic").flag("-Wl,--no-undefined")
         .flag("-Wl,-pie,-eenclave_entry").flag("-Wl,--export-dynamic")
         .flag("-Wl,--defsym,__ImageBase=0").flag("-Wl,--gc-sections")
-        .flag(&*format!("-Wl,--version-script={}", enclave_config.to_str().expect("Invalid UTF-8 for OUT_DIR")))
+        .flag(&*format!("-Wl,--version-script={}", version_script.to_str().expect("Invalid UTF-8 for OUT_DIR")))
         .shared_flag(true).compile("enclave.so");
 
-    let mut enclave_binary = PathBuf::from(OUT_DIR).unwrap();
+    let mut enclave_binary = PathBuf::from(env::var("OUT_DIR").unwrap());
     enclave_binary.set_file_name("enclave.so");
-    enclave_binary
+    sign_enclave_binary(enclave_binary)
+}
+
+fn sign_enclave_binary<P: AsRef<Path>>(unsigned_enclave: P) -> PathBuf {
+    let mut signed_binary = PathBuf::from(unsigned_enclave.as_ref());
+    signed_binary.set_extension("signed.so");
+
+    let mut command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_sign");
+    command.arg("sign") .arg("-enclave") .arg(unsigned_enclave.as_ref())
+        .arg("-config") .arg("")
+        .arg("-key") .arg("signing_key.pem")
+        .arg("-out") .arg(&signed_binary);
+    let status = command.status().expect("Failed to execute enclave signer");
+    match status.code().unwrap() {
+        0 => (),
+        _ => panic!("Failed to sign enclave")
+    }
+
+    signed_binary
 }
 
 fn create_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
@@ -80,7 +97,7 @@ fn create_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
         .include("/opt/intel/sgxsdk/include/tlibc")
         .compile("untrusted");
 
-    let mut untrusted_object = PathBuf::from(OUT_DIR).unwrap();
+    let mut untrusted_object = PathBuf::from(env::var("OUT_DIR").unwrap());
     untrusted_object.set_file_name("untrusted.a");
     untrusted_object
 }
