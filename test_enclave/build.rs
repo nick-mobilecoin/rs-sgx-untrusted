@@ -14,19 +14,20 @@ static SGX_TRUSTED_LIBRARY_PATH: &str = "/opt/intel/sgxsdk/lib64";
 static EDGER_FILE: &str = "src/enclave.edl";
 static ENCLAVE_FILE: &str = "src/enclave.c";
 const CURRENT_FILE: &'static str = concat!(env!("CARGO_MANIFEST_DIR"), "/", "..", "/", file!());
+const OUT_DIR: &'static str = env!(OUT_DIR);
 
 fn main() {
     let current_file = PathBuf::from(CURRENT_FILE);
     let root_path = current_file.parent().unwrap();
-    let edger_files = generate_enclave_definitions(PathBuf::from(&root_path).join(EDGER_FILE));
+    let edger_files = create_enclave_definitions(PathBuf::from(&root_path).join(EDGER_FILE));
 
-    generate_enclave_binary([PathBuf::from(root_path).join(ENCLAVE_FILE), edger_files.trusted]);
+    create_enclave_binary([PathBuf::from(root_path).join(ENCLAVE_FILE), edger_files.trusted]);
 
-    generate_untrusted_library(edger_files.untrusted);
+    create_untrusted_library(edger_files.untrusted);
 }
 
-fn generate_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
+    let out_path = PathBuf::from(OUT_DIR).unwrap();
     let mut command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r");
     command.current_dir(&out_path).arg(edl_file.as_ref().as_os_str());
     let status = command.status().expect("Failed to run edger8r");
@@ -42,12 +43,12 @@ fn generate_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
     EdgerFiles{trusted, untrusted}
 }
 
-fn generate_enclave_binary<P>(files: P) -> PathBuf
+fn create_enclave_binary<P>(files: P) -> PathBuf
     where
         P: IntoIterator,
         P::Item: AsRef<Path>, {
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = PathBuf::from(OUT_DIR).unwrap();
     let mut enclave_config = out_path.clone();
     enclave_config.set_file_name("enclave.lds");
 
@@ -67,19 +68,19 @@ fn generate_enclave_binary<P>(files: P) -> PathBuf
         .flag(&*format!("-Wl,--version-script={}", enclave_config.to_str().expect("Invalid UTF-8 for OUT_DIR")))
         .shared_flag(true).compile("enclave.so");
 
-    let mut enclave_binary = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let mut enclave_binary = PathBuf::from(OUT_DIR).unwrap();
     enclave_binary.set_file_name("enclave.so");
     enclave_binary
 }
 
-fn generate_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
+fn create_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
 
     Build::new().file(untrusted_file)
         .include("/opt/intel/sgxsdk/include")
         .include("/opt/intel/sgxsdk/include/tlibc")
         .compile("untrusted");
 
-    let mut untrusted_object = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let mut untrusted_object = PathBuf::from(OUT_DIR).unwrap();
     untrusted_object.set_file_name("untrusted.a");
     untrusted_object
 }
