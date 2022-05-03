@@ -19,7 +19,27 @@ fn main() {
     enclave_config.set_file_name("enclave.lds");
     let edger_files = generate_enclave_definitions(EDGER_FILE);
 
-    Build::new().files([ENCLAVE_FILE, edger_files.trusted])
+    generate_enclave_binary([ENCLAVE_FILE, edger_files.trusted]);
+
+    generate_untrusted_library(edger_files.untrusted);
+}
+
+fn generate_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r").current_dir(out_path).arg(&edl_file);
+    command.output().expect("Failed to run edger8r");
+    let basename = edl_file.file_prefix().unwrap();
+    let trusted = PathBuf::from(&edl_file).set_file_name(format!("{}_t.c", basename)).unwrap();
+    let untrusted = PathBuf::from(&edl_file).set_file_name(format!("{}_u.c", basename)).unwrap();
+    EdgerFiles{trusted, untrusted}
+}
+
+fn generate_enclave_binary<P>(files: P) -> PathBuf
+    where
+        P: IntoIterator,
+        P::Item: AsRef<Path>, {
+
+    Build::new().files(files)
         .flag("-Wl,--no-undefined")
         .flag("-nostdlib")
         .flag("-nodefaultlibs")
@@ -33,14 +53,16 @@ fn main() {
         .flag(&*format!("-Wl,--version-script={}", enclave_config.to_str().expect("Invalid UTF-8 for OUT_DIR")))
         .shared_flag(true).compile("enclave.so");
 
+    let mut enclave_binary = PathBuf::from(env::var("OUT_DIR").unwrap());
+    enclave_binary.set_file_name("enclave.so");
+    enclave_binary
 }
 
-fn generate_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r").current_dir(out_path).arg(&edl_file);
-    command.output().expect("Failed to run edger8r");
-    let basename = edl_file.file_prefix().unwrap();
-    let trusted = PathBuf::from(&edl_file).set_file_name(format!("{}_t.c", basename)).unwrap();
-    let untrusted = PathBuf::from(&edl_file).set_file_name(format!("{}_u.c", basename)).unwrap();
-    EdgerFiles{trusted, untrusted}
+fn generate_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
+
+    Build::new().file(untrusted_file).compile("untrusted");
+
+    let mut untrusted_object = PathBuf::from(env::var("OUT_DIR").unwrap());
+    untrusted_object.set_file_name("untrusted.a");
+    untrusted_object
 }

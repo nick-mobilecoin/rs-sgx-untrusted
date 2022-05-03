@@ -1,0 +1,16 @@
+// Copyright (c) 2022 The MobileCoin Foundation
+enclave {
+
+    trusted {
+
+        /*
+         * A basic functoin that just adds 2 to its input
+         */
+        public void ecall_add_2([in] int input, [out] int sum);
+    };
+
+    untrusted {
+
+    };
+
+};
