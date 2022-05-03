@@ -16,10 +16,8 @@ static ENCLAVE_FILE: &str = "src/enclave.c";
 const CURRENT_FILE: &'static str = concat!(env!("CARGO_MANIFEST_DIR"), "/", "..", "/", file!());
 
 fn main() {
-    warning!("THe current file is {:?}", CURRENT_FILE);
     let current_file = PathBuf::from(CURRENT_FILE);
     let root_path = current_file.parent().unwrap();
-    warning!("THe current dir is {:?}", root_path);
     let edger_files = generate_enclave_definitions(PathBuf::from(&root_path).join(EDGER_FILE));
 
     generate_enclave_binary([PathBuf::from(root_path).join(ENCLAVE_FILE), edger_files.trusted]);
@@ -29,10 +27,8 @@ fn main() {
 
 fn generate_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    warning!("The output path is {:?}", out_path);
     let mut command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r");
     command.current_dir(&out_path).arg(edl_file.as_ref().as_os_str());
-    warning!("The command is {:?}", command);
     let status = command.status().expect("Failed to run edger8r");
     match status.code().unwrap() {
         0 => (),
@@ -56,6 +52,8 @@ fn generate_enclave_binary<P>(files: P) -> PathBuf
     enclave_config.set_file_name("enclave.lds");
 
     Build::new().files(files)
+        .include("/opt/intel/sgxsdk/include")
+        .include("/opt/intel/sgxsdk/include/tlibc")
         .flag("-Wl,--no-undefined")
         .flag("-nostdlib")
         .flag("-nodefaultlibs")
@@ -76,7 +74,10 @@ fn generate_enclave_binary<P>(files: P) -> PathBuf
 
 fn generate_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
 
-    Build::new().file(untrusted_file).compile("untrusted");
+    Build::new().file(untrusted_file)
+        .include("/opt/intel/sgxsdk/include")
+        .include("/opt/intel/sgxsdk/include/tlibc")
+        .compile("untrusted");
 
     let mut untrusted_object = PathBuf::from(env::var("OUT_DIR").unwrap());
     untrusted_object.set_file_name("untrusted.a");
