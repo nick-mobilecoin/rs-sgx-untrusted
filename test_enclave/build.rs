@@ -40,10 +40,8 @@ fn generate_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
     }
     let basename = edl_file.as_ref().file_stem().unwrap().to_str().unwrap();
 
-    let mut trusted = out_path.clone();
-    trusted.set_file_name(format!("{}_t.c", basename));
-    let mut untrusted = out_path.clone();
-    untrusted.set_file_name(format!("{}_u.c", basename));
+    let trusted = out_path.join(format!("{}_t.c", basename));
+    let untrusted = out_path.join(format!("{}_u.c", basename));
 
     EdgerFiles{trusted, untrusted}
 }
