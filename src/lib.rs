@@ -42,6 +42,17 @@ impl Enclave {
         result
     }
 }
+impl Drop for Enclave {
+    fn drop(&mut self) {
+        if let Some(id) = self.id {
+            let result = unsafe{sgx_destroy_enclave(id)};
+            if result != _status_t_SGX_SUCCESS {
+                // Not sure if this should be panic or silently ignore
+                panic!("Failed to destroy the enclave")
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -50,7 +61,6 @@ mod tests {
     #[test]
     fn fail_to_create_enclave_with_non_existent_file() {
         let enclave = Enclave::new("does_not_exist.signed.so");
-        // assert_eq!(enclave.create(), _status_t_SGX_SUCCESS);
         assert_eq!(enclave.create(), _status_t_SGX_ERROR_ENCLAVE_FILE_ACCESS);
     }
 }
