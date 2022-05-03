@@ -17,10 +17,10 @@ pub struct Enclave {
     filename: CString,
 
     // The enclave ID, assigned by the sgx interface
-    // Will be None when the enclave has not been created.
+    // Will be `None` when the enclave has not been created.
     id: Option<sgx_enclave_id_t>,
 
-    // True if the enclave should be created in debug mode
+    // `true` if the enclave should be created in debug mode
     debug: bool,
 }
 
@@ -30,7 +30,12 @@ impl Enclave {
         Enclave{filename, ..Default::default()}
     }
 
-    fn create(mut self) -> sgx_status_t {
+    fn debug(&mut self, debug: bool) -> &mut Enclave {
+        self.debug = debug;
+        self
+    }
+
+    fn create(&mut self) -> sgx_status_t {
         let mut launch_token: sgx_launch_token_t = [0; 1024];
         let mut launch_token_updated: c_int = 0;
         let mut misc_attr: sgx_misc_attribute_t = unsafe{ MaybeUninit::<sgx_misc_attribute_t>::zeroed().assume_init() };
@@ -51,6 +56,7 @@ impl Drop for Enclave {
                 panic!("Failed to destroy the enclave")
             }
         }
+        self.id = None;
     }
 }
 
@@ -60,7 +66,23 @@ mod tests {
 
     #[test]
     fn fail_to_create_enclave_with_non_existent_file() {
-        let enclave = Enclave::new("does_not_exist.signed.so");
+        let mut enclave = Enclave::new("does_not_exist.signed.so");
         assert_eq!(enclave.create(), _status_t_SGX_ERROR_ENCLAVE_FILE_ACCESS);
+    }
+
+    #[test]
+    fn test_default_debug_flag_is_0() {
+        // For the debug flag it's not easy, in a unit test, to test it was
+        // passed to `sgx_create_enclave()`, instead we focus on the
+        // `as c_int` portion maps correctly to 0 or 1
+        let enclave = Enclave::new("");
+        assert_eq!(enclave.debug as c_int, 0);
+    }
+
+    #[test]
+    fn test_when_debug_flag_is_true_it_is_1() {
+        let mut enclave = Enclave::new("");
+        enclave.debug(true);
+        assert_eq!(enclave.debug as c_int, 1);
     }
 }
