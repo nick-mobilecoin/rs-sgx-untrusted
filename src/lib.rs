@@ -5,9 +5,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use std::ffi::CString;
-use std::mem::MaybeUninit;
-use std::os::raw::c_int;
+use std::{ffi::CString, mem::MaybeUninit, os::raw::c_int};
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
