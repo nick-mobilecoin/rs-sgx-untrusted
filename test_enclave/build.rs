@@ -1,4 +1,6 @@
 // Copyright (c) 2022 The MobileCoin Foundation
+//
+// There is quite a bit going on here.
 
 extern crate bindgen;
 use cargo_emit::rerun_if_changed;
@@ -11,17 +13,18 @@ struct EdgerFiles {
     trusted: PathBuf,
     untrusted: PathBuf
 }
-static DEFAULT_SGX_SDK_PATH: &str = "/opt/intel/sgxsdk";
-static EDGER_FILE: &str = "src/enclave.edl";
-static ENCLAVE_FILE: &str = "src/enclave.c";
-const CURRENT_FILE: &'static str = concat!(env!("CARGO_MANIFEST_DIR"), "/", "..", "/", file!());
+const DEFAULT_SGX_SDK_PATH: &str = "/opt/intel/sgxsdk";
+const EDGER_FILE: &str = "src/enclave.edl";
+const ENCLAVE_FILE: &str = "src/enclave.c";
+const ENCLAVE_LINKER_SCRIPT: &str = "src/enclave.lds";
+const SIGNING_KEY: &str = "src/signing_key.pem";
+const ENCLAVE_CONFIG: &str = "src/config.xml";
 
 fn main() {
-    let current_file = PathBuf::from(CURRENT_FILE);
-    let root_path = current_file.parent().unwrap();
-    let edger_files = create_enclave_definitions(PathBuf::from(&root_path).join(EDGER_FILE));
+    let root_dir = root_dir();
+    let edger_files = create_enclave_definitions(root_dir.join(EDGER_FILE));
 
-    create_enclave_binary([PathBuf::from(root_path).join(ENCLAVE_FILE), edger_files.trusted]);
+    create_enclave_binary([root_dir.join(ENCLAVE_FILE), edger_files.trusted]);
     create_untrusted_library(&edger_files.untrusted);
     let mut untrusted_header = edger_files.untrusted.clone();
     untrusted_header.set_extension("h");
@@ -34,6 +37,10 @@ fn sgx_library_path() -> String{
 
 fn out_dir() -> PathBuf {
     PathBuf::from(env::var("OUT_DIR").unwrap())
+}
+
+fn root_dir() -> PathBuf {
+    PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
 }
 
 fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
@@ -100,7 +107,7 @@ fn create_dynamic_enclave_binary<P: AsRef<Path>>(static_enclave: P) -> PathBuf {
         .arg("--export-dynamic")
         .args(&["--defsym", "__ImageBase=0"])
         .arg("--gc-sections")
-        .arg("--version-script=enclave.lds");
+        .arg(&format!("--version-script={}", ENCLAVE_LINKER_SCRIPT));
 
     let status = command.status().expect("Failed to run the linker for dynamic enclave");
     match status.code().unwrap() {
@@ -117,8 +124,8 @@ fn sign_enclave_binary<P: AsRef<Path>>(unsigned_enclave: P) -> PathBuf {
 
     let mut command = Command::new(format!("{}/bin/x64/sgx_sign", sgx_library_path()));
     command.arg("sign") .arg("-enclave") .arg(unsigned_enclave.as_ref())
-        .arg("-config") .arg("config.xml")
-        .arg("-key") .arg("signing_key.pem")
+        .arg("-config") .arg(ENCLAVE_CONFIG)
+        .arg("-key") .arg(SIGNING_KEY)
         .arg("-out") .arg(&signed_binary);
     let status = command.status().expect("Failed to execute enclave signer");
     match status.code().unwrap() {
