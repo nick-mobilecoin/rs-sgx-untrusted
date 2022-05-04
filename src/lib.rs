@@ -77,7 +77,7 @@ impl Drop for Enclave {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_enclave::{ENCLAVE, ecall_add_2};
+    use test_enclave::{ecall_add_2, ENCLAVE};
 
     #[test]
     fn fail_to_create_enclave_with_non_existent_file() {
@@ -98,7 +98,7 @@ mod tests {
         let id = enclave.id.unwrap();
 
         let mut sum: c_int = 3;
-        let result = unsafe{ecall_add_2(id, 3, &mut sum)};
+        let result = unsafe { ecall_add_2(id, 3, &mut sum) };
         assert_eq!(result, _status_t_SGX_SUCCESS);
         assert_eq!(sum, 3 + 2);
     }
