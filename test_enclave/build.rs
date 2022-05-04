@@ -9,10 +9,15 @@ use std::path::{Path, PathBuf};
 use cc::Build;
 use std::process::{Command};
 
+/// Edger generated C files.  This is only teh C files.
 struct EdgerFiles {
+    /// The full path to the trusted C file, <path/to/basename>_t.c
     trusted: PathBuf,
+
+    /// The full path to the untrusted C file, <path/to/basename>_u.c
     untrusted: PathBuf
 }
+
 const DEFAULT_SGX_SDK_PATH: &str = "/opt/intel/sgxsdk";
 const EDGER_FILE: &str = "src/enclave.edl";
 const ENCLAVE_FILE: &str = "src/enclave.c";
@@ -26,25 +31,49 @@ fn main() {
 
     create_enclave_binary([root_dir.join(ENCLAVE_FILE), edger_files.trusted]);
     create_untrusted_library(&edger_files.untrusted);
+
     let mut untrusted_header = edger_files.untrusted.clone();
     untrusted_header.set_extension("h");
     create_untrusted_bindings(untrusted_header);
 }
 
+/// Provide the base path for the Intel SGX SDK.  Will use the environment
+/// variable `SGX_SDK`.  If this isn't set it will default to
+/// `/opt/intel/sgxsdk`.
 fn sgx_library_path() -> String{
     env::var("SGX_SDK").unwrap_or_else(|_| String::from(DEFAULT_SGX_SDK_PATH))
 }
 
+/// The value of the environment variable `OUT_DIR`, this must be set.
+/// See https://doc.rust-lang.org/cargo/reference/environment-variables.html
 fn out_dir() -> PathBuf {
     PathBuf::from(env::var("OUT_DIR").unwrap())
 }
 
+/// The root dir of this crate. Will be the value of `CARGO_MANIFEST_DIR`
+/// See https://doc.rust-lang.org/cargo/reference/environment-variables.html
 fn root_dir() -> PathBuf {
     PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
 }
 
+/// The ld linker to use.  This has to be an ld linker as lld will fail
+/// to link a working enclave
+fn ld_linker() -> String{
+    env::var("LD").unwrap_or_else(|_| String::from("ld"))
+}
+
+/// Create the C files for the enclave definitions.  This creates both the
+/// trusted and the untrusted files.
+///
+/// # Arguments
+///
+/// * `edl_file` - The enclave definition file.
+///
+/// # Returns
+/// The full path to resultant C files for the enclave definition
 fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
     rerun_if_changed!(edl_file.as_ref().as_os_str().to_str().expect("Invalid UTF-8 in edl path"));
+
     let mut command = Command::new(&format!("{}/bin/x64/sgx_edger8r", sgx_library_path()));
     let out_dir = out_dir();
     command.current_dir(&out_dir).arg(edl_file.as_ref().as_os_str());
@@ -53,23 +82,40 @@ fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
         0 => (),
         _ => panic!("Failed to run edger8")
     }
-    let basename = edl_file.as_ref().file_stem().unwrap().to_str().unwrap();
 
+    let basename = edl_file.as_ref().file_stem().unwrap().to_str().unwrap();
     let trusted = out_dir.join(format!("{}_t.c", basename));
     let untrusted = out_dir.join(format!("{}_u.c", basename));
 
     EdgerFiles{trusted, untrusted}
 }
 
+/// Create enclave binary.  The binary is a shared library.
+///
+/// # Arguments
+///
+/// * `files` - The source files to include in the binary
+///
+/// # Returns
+/// The full path to resultant binary file.  This binary will be signed and
+/// ready for use in `sgx_create_enclave()`.
 fn create_enclave_binary<P>(files: P) -> PathBuf
     where
         P: IntoIterator,
         P: Clone,
         P::Item: AsRef<Path>, {
+
     for file in files.clone() {
         rerun_if_changed!(file.as_ref().as_os_str().to_str().expect("Invalid UTF-8 in enclave c file"));
     }
 
+    // This `Build` creates a static library.  If we don't omit the
+    // `cargo_metadata` then this static library will be linked into
+    // the consuming crate. The enclave binary is meant to be a stand alone,
+    // so we do *not* want to link into the consuming crate.
+    // If one happens to link this in with the current crate, prepare for
+    // memory seg faults as the trusted (enclave) implementations will
+    // be directly linked in.
     Build::new().files(files)
         .include(format!("{}/include", sgx_library_path()))
         .include(format!("{}/include/tlibc", sgx_library_path()))
@@ -80,12 +126,22 @@ fn create_enclave_binary<P>(files: P) -> PathBuf
     sign_enclave_binary(dynamic_enclave)
 }
 
-// See https://github.com/alexcrichton/cc-rs/issues/250 for lack of dynamic
-// lib in cc crate
+/// Create a dynamic version of the enclave.  This is *unsigned*.
+///
+/// See https://github.com/alexcrichton/cc-rs/issues/250 for lack of dynamic
+/// lib in cc crate
+///
+/// # Arguments
+///
+/// * `static_enclave` - The static enclave binary
+///
+/// # Returns
+/// The full path to resultant shared library file.
 fn create_dynamic_enclave_binary<P: AsRef<Path>>(static_enclave: P) -> PathBuf {
     let mut dynamic_enclave = PathBuf::from(static_enclave.as_ref());
     dynamic_enclave.set_extension("so");
-    let mut command = Command::new("ld");
+
+    let mut command = Command::new(ld_linker());
     command
         .arg("-o")
         .arg(dynamic_enclave.to_str().expect("Invalid UTF-8 in static enclave path"))
@@ -118,6 +174,15 @@ fn create_dynamic_enclave_binary<P: AsRef<Path>>(static_enclave: P) -> PathBuf {
 
 }
 
+/// Sign the enclave binary
+///
+/// # Arguments
+///
+/// * `unsigned_enclave` - The unsigned enclave binary
+///
+/// # Returns
+/// The full path to signed binary file.  This binary will be signed and
+/// ready for use in `sgx_create_enclave()`.
 fn sign_enclave_binary<P: AsRef<Path>>(unsigned_enclave: P) -> PathBuf {
     let mut signed_binary = PathBuf::from(unsigned_enclave.as_ref());
     signed_binary.set_extension("signed.so");
@@ -136,6 +201,18 @@ fn sign_enclave_binary<P: AsRef<Path>>(unsigned_enclave: P) -> PathBuf {
     signed_binary
 }
 
+/// Create untrusted library.  This is meant to be used by consuming crates.
+///
+/// To ensure consumers correctly call out `libsgx_urts.a`, it is *not* linked
+/// in here.  This is a test support library, this intentional omission is
+/// partially a build test.
+///
+/// # Arguments
+///
+/// * `untrusted_file` - The untrusted C file generated from edger8
+///
+/// # Returns
+/// The full path to resultant untrusted library.
 fn create_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
 
     Build::new().file(untrusted_file)
@@ -148,6 +225,15 @@ fn create_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
     untrusted_object
 }
 
+/// Create bindings to the untrusted library.
+///
+/// To ensure consumers correctly call out `libsgx_urts.a`, it is *not* linked
+/// in here.  This is a test support library, this intentional omission is
+/// partially a build test.
+///
+/// # Arguments
+///
+/// * `header` - The untrusted header file generated from edger8
 fn create_untrusted_bindings<P: AsRef<Path>>(header: P) {
     let bindings = bindgen::Builder::default()
         .header(header.as_ref().to_str().unwrap())
