@@ -4,7 +4,6 @@ use std::env;
 use std::path::{Path, PathBuf};
 use cc::Build;
 use std::process::{Command};
-use cargo_emit::warning;
 
 struct EdgerFiles {
     trusted: PathBuf,

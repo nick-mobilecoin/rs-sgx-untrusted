@@ -77,11 +77,18 @@ impl Drop for Enclave {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_enclave::ENCLAVE;
 
     #[test]
     fn fail_to_create_enclave_with_non_existent_file() {
         let mut enclave = Enclave::new("does_not_exist.signed.so");
         assert_eq!(enclave.create(), _status_t_SGX_ERROR_ENCLAVE_FILE_ACCESS);
+    }
+
+    #[test]
+    fn create_enclave_with_existent_file() {
+        let mut enclave = Enclave::new(ENCLAVE);
+        assert_eq!(enclave.create(), _status_t_SGX_SUCCESS);
     }
 
     #[test]
