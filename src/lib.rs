@@ -54,7 +54,7 @@ impl Enclave {
     /// Create the enclave
     ///
     /// Will talk to the SGX SDK to create the enclave.  Once the enclave has
-    /// been created then calls on the enclave can be made.
+    /// been created then calls on the enclave can be made.  See `get_id()`
     ///
     /// # Returns
     ///
@@ -83,12 +83,13 @@ impl Enclave {
         result
     }
 }
+
 impl Drop for Enclave {
     fn drop(&mut self) {
         if let Some(id) = self.id {
             // Per the docs, this will only return SGX_SUCCESS or
-            // SGX_ERROR_INVALID_ENCLAVE_ID the invalid ID error will only
-            // happen when the id is invalid, the enclave hasn't been loaded,
+            // SGX_ERROR_INVALID_ENCLAVE_ID. The invalid ID error will only
+            // happen when the ID is invalid, the enclave hasn't been loaded,
             // or the enclave has already been destroyed. Any of these cases
             // don't afford corrective action, so ignore the return value
             unsafe { sgx_destroy_enclave(id) };
@@ -109,15 +110,15 @@ mod tests {
     }
 
     #[test]
-    fn create_enclave_succeeds() {
+    fn creating_enclave_succeeds() {
         let mut enclave = Enclave::new(ENCLAVE);
         assert_eq!(enclave.create(), _status_t_SGX_SUCCESS);
     }
 
     #[test]
-    fn calling_enclave_function_provides_expected_results() {
+    fn calling_into_a_an_enclave_function_provides_valid_results() {
         let mut enclave = Enclave::new(ENCLAVE);
-        assert_eq!(enclave.create(), _status_t_SGX_SUCCESS);
+        enclave.create();
         let id = enclave.get_id().unwrap();
 
         let mut sum: c_int = 3;
@@ -127,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn test_default_debug_flag_is_0() {
+    fn default_debug_flag_is_0() {
         // For the debug flag it's not easy, in a unit test, to test it was
         // passed to `sgx_create_enclave()`, instead we focus on the
         // `as c_int` portion maps correctly to 0 or 1
@@ -136,7 +137,7 @@ mod tests {
     }
 
     #[test]
-    fn test_when_debug_flag_is_true_it_is_1() {
+    fn when_debug_flag_is_true_it_is_1() {
         let mut enclave = Enclave::new("");
         enclave.debug(true);
         assert_eq!(enclave.debug as c_int, 1);
