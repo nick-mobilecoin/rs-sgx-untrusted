@@ -1,4 +1,6 @@
 // Copyright (c) 2022 The MobileCoin Foundation
+//
+// Builds the FFI bindings for the untrusted side of the Intel SGXSDK
 extern crate bindgen;
 use cargo_emit::{rustc_link_arg, rustc_link_search};
 
