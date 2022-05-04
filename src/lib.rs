@@ -1,5 +1,5 @@
 // Copyright (c) 2022 The MobileCoin Foundation
-// See https://download.01.org/intel-sgx/sgx-dcap/1.9/linux/docs/Intel_SGX_Enclave_Common_Loader_API_Reference.pdf
+// See https://download.01.org/intel-sgx/sgx-dcap/1.13/linux/docs/Intel_SGX_Enclave_Common_Loader_API_Reference.pdf
 //
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
@@ -16,13 +16,19 @@ pub struct Enclave {
 
     // The enclave ID, assigned by the sgx interface
     // Will be `None` when the enclave has not been created.
-    id: Option<sgx_enclave_id_t>,
+    pub id: Option<sgx_enclave_id_t>,
 
     // `true` if the enclave should be created in debug mode
     debug: bool,
 }
 
 impl Enclave {
+    /// Returns an Enclave for the provided signed enclave.
+    ///
+    /// # Arguments
+    ///
+    /// * `filename` - The name of the enclave file.  This should be a signed
+    ///     enclave.
     pub fn new(filename: &str) -> Enclave {
         let filename = CString::new(filename).expect("Can't convert enclave filename to CString.");
         Enclave {
@@ -31,11 +37,30 @@ impl Enclave {
         }
     }
 
+    /// Toggle debugging of the enclave on or off.  The default is off.
+    ///
+    /// # Arguments
+    ///
+    /// * `debug` - `true` to enable enclave debugging, `false` to disable it.
     pub fn debug(&mut self, debug: bool) -> &mut Enclave {
         self.debug = debug;
         self
     }
 
+    pub fn get_id(&self) -> Option<&sgx_enclave_id_t> {
+        Option::from(&self.id)
+    }
+
+    /// Create the enclave
+    ///
+    /// Will talk to the SGX SDK to create the enclave.  Once the enclave has
+    /// been created then calls on the enclave can be made.
+    ///
+    /// # Returns
+    ///
+    /// `SUCCESS` when the enclave is created successfully.  See
+    /// https://download.01.org/intel-sgx/sgx-dcap/1.13/linux/docs/Intel_SGX_Enclave_Common_Loader_API_Reference.pdf
+    /// for error codes and their meaning.
     pub fn create(&mut self) -> sgx_status_t {
         let mut launch_token: sgx_launch_token_t = [0; 1024];
         let mut launch_token_updated: c_int = 0;
@@ -93,10 +118,10 @@ mod tests {
     fn calling_enclave_function_provides_expected_results() {
         let mut enclave = Enclave::new(ENCLAVE);
         assert_eq!(enclave.create(), _status_t_SGX_SUCCESS);
-        let id = enclave.id.unwrap();
+        let id = enclave.get_id().unwrap();
 
         let mut sum: c_int = 3;
-        let result = unsafe { ecall_add_2(id, 3, &mut sum) };
+        let result = unsafe { ecall_add_2(*id, 3, &mut sum) };
         assert_eq!(result, _status_t_SGX_SUCCESS);
         assert_eq!(sum, 3 + 2);
     }
