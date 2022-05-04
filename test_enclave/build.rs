@@ -1,5 +1,7 @@
 // Copyright (c) 2022 The MobileCoin Foundation
 
+extern crate bindgen;
+use cargo_emit::rerun_if_changed;
 use std::env;
 use std::path::{Path, PathBuf};
 use cc::Build;
@@ -20,11 +22,14 @@ fn main() {
     let edger_files = create_enclave_definitions(PathBuf::from(&root_path).join(EDGER_FILE));
 
     create_enclave_binary([PathBuf::from(root_path).join(ENCLAVE_FILE), edger_files.trusted]);
-
-    create_untrusted_library(edger_files.untrusted);
+    create_untrusted_library(&edger_files.untrusted);
+    let mut untrusted_header = edger_files.untrusted.clone();
+    untrusted_header.set_extension("h");
+    create_untrusted_bindings(untrusted_header);
 }
 
 fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
+    rerun_if_changed!(edl_file.as_ref().as_os_str().to_str().expect("Invalid UTF-8 in edl path"));
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let mut command = Command::new("/opt/intel/sgxsdk/bin/x64/sgx_edger8r");
     command.current_dir(&out_path).arg(edl_file.as_ref().as_os_str());
@@ -44,12 +49,16 @@ fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
 fn create_enclave_binary<P>(files: P) -> PathBuf
     where
         P: IntoIterator,
+        P: Clone,
         P::Item: AsRef<Path>, {
+    for file in files.clone() {
+        rerun_if_changed!(file.as_ref().as_os_str().to_str().expect("Invalid UTF-8 in enclave c file"));
+    }
 
     Build::new().files(files)
         .include("/opt/intel/sgxsdk/include")
         .include("/opt/intel/sgxsdk/include/tlibc")
-        .shared_flag(true).compile("enclave");
+        .cargo_metadata(false) .shared_flag(true).compile("enclave");
 
     let static_enclave = PathBuf::from(env::var("OUT_DIR").unwrap()).join("libenclave.a");
     let dynamic_enclave = create_dynamic_enclave_binary(static_enclave);
@@ -66,12 +75,15 @@ fn create_dynamic_enclave_binary<P: AsRef<Path>>(static_enclave: P) -> PathBuf {
         .arg("-o")
         .arg(dynamic_enclave.to_str().expect("Invalid UTF-8 in static enclave path"))
         .args(&["-z", "relro", "-z", "now", "-z", "noexecstack"])
+        .arg(&format!("-L{}/cve_2020_0551_load", SGX_TRUSTED_LIBRARY_PATH))
         .arg(&format!("-L{}", SGX_TRUSTED_LIBRARY_PATH))
         .arg("--no-undefined")
         .arg("--nostdlib")
+        .arg("--start-group")
         .args(&["--whole-archive", "-lsgx_trts_sim", "--no-whole-archive"])
         .arg(static_enclave.as_ref().to_str().unwrap())
         .args(&["-lsgx_tstdc", "-lsgx_tcxx", "-lsgx_tcrypto", "-lsgx_tservice_sim"])
+        .arg("--end-group")
         .arg("-Bstatic")
         .arg("-Bsymbolic")
         .arg("--no-undefined")
@@ -119,4 +131,20 @@ fn create_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
     let mut untrusted_object = PathBuf::from(env::var("OUT_DIR").unwrap());
     untrusted_object.set_file_name("untrusted.a");
     untrusted_object
+}
+
+fn create_untrusted_bindings<P: AsRef<Path>>(header: P) {
+    let bindings = bindgen::Builder::default()
+        .header(header.as_ref().to_str().unwrap())
+        .clang_arg("-I/opt/intel/sgxsdk/include")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        // See https://github.com/rust-lang/rust-bindgen/issues/1651 for disabling tests
+        .layout_tests(false)
+        .generate()
+        .expect("Unable to generate bindings");
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
 }
