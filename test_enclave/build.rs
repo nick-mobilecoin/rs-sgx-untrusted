@@ -47,29 +47,49 @@ fn create_enclave_binary<P>(files: P) -> PathBuf
         P: IntoIterator,
         P::Item: AsRef<Path>, {
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let mut version_script = out_path.clone();
-    version_script.set_file_name("enclave.lds");
-
     Build::new().files(files)
         .include("/opt/intel/sgxsdk/include")
         .include("/opt/intel/sgxsdk/include/tlibc")
-        .flag("-Wl,--no-undefined")
-        .flag("-nostdlib")
-        .flag("-nodefaultlibs")
-        .flag("-nostartfiles")
-        .flag(&format!("-L{}", SGX_TRUSTED_LIBRARY_PATH))
-        .flag("-Wl,--whole-archive").flag("-lsgx_trts_sim").flag("-Wl,--no-whole-archive")
-        .flag("-lsgx_tstdc").flag("-lsgx_tcxx").flag("-lsgx_crypto_sim").flag("-lsgx_service_sim")
-        .flag("-Wl,-Bstatic").flag("-Wl,-Bsymbolic").flag("-Wl,--no-undefined")
-        .flag("-Wl,-pie,-eenclave_entry").flag("-Wl,--export-dynamic")
-        .flag("-Wl,--defsym,__ImageBase=0").flag("-Wl,--gc-sections")
-        .flag(&*format!("-Wl,--version-script={}", version_script.to_str().expect("Invalid UTF-8 for OUT_DIR")))
-        .shared_flag(true).compile("enclave.so");
+        .shared_flag(true).compile("enclave");
 
-    let mut enclave_binary = PathBuf::from(env::var("OUT_DIR").unwrap());
-    enclave_binary.set_file_name("enclave.so");
-    sign_enclave_binary(enclave_binary)
+    let static_enclave = PathBuf::from(env::var("OUT_DIR").unwrap()).join("libenclave.a");
+    let dynamic_enclave = create_dynamic_enclave_binary(static_enclave);
+    sign_enclave_binary(dynamic_enclave)
+}
+
+// See https://github.com/alexcrichton/cc-rs/issues/250 for lack of dynamic
+// lib in cc crate
+fn create_dynamic_enclave_binary<P: AsRef<Path>>(static_enclave: P) -> PathBuf {
+    let mut dynamic_enclave = PathBuf::from(static_enclave.as_ref());
+    dynamic_enclave.set_extension("so");
+    let mut command = Command::new("ld");
+    command
+        .arg("-o")
+        .arg(dynamic_enclave.to_str().expect("Invalid UTF-8 in static enclave path"))
+        .args(&["-z", "relro", "-z", "now", "-z", "noexecstack"])
+        .arg(&format!("-L{}", SGX_TRUSTED_LIBRARY_PATH))
+        .arg("--no-undefined")
+        .arg("--nostdlib")
+        .args(&["--whole-archive", "-lsgx_trts_sim", "--no-whole-archive"])
+        .arg(static_enclave.as_ref().to_str().unwrap())
+        .args(&["-lsgx_tstdc", "-lsgx_tcxx", "-lsgx_tcrypto", "-lsgx_tservice_sim"])
+        .arg("-Bstatic")
+        .arg("-Bsymbolic")
+        .arg("--no-undefined")
+        .arg("-pie")
+        .arg("-eenclave_entry")
+        .arg("--export-dynamic")
+        .args(&["--defsym", "__ImageBase=0"])
+        .arg("--gc-sections")
+        .arg("--version-script=enclave.lds");
+
+    let status = command.status().expect("Failed to run the linker for dynamic enclave");
+    match status.code().unwrap() {
+        0 => (),
+        _ => panic!("Failed to link the dynamic enclave")
+    }
+    dynamic_enclave
+
 }
 
 fn sign_enclave_binary<P: AsRef<Path>>(unsigned_enclave: P) -> PathBuf {
