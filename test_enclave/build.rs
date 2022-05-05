@@ -1,6 +1,5 @@
 // Copyright (c) 2022 The MobileCoin Foundation
-//
-// There is quite a bit going on here.
+#![doc = include_str!("README.md")]
 
 extern crate bindgen;
 use cargo_emit::rerun_if_changed;

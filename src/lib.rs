@@ -16,7 +16,7 @@ pub struct Enclave {
 
     // The enclave ID, assigned by the sgx interface
     // Will be `None` when the enclave has not been created.
-    pub id: Option<sgx_enclave_id_t>,
+    id: Option<sgx_enclave_id_t>,
 
     // `true` if the enclave should be created in debug mode
     debug: bool,
@@ -47,6 +47,13 @@ impl Enclave {
         self
     }
 
+    /// Get the ID for this instance.  The ID will not be valid to use in SGX
+    /// calls once this instance has dropped.
+    ///
+    /// The return value is intentionally a reference to a `sgx_enclave_id_t`.
+    /// This allows consumers to leverage the lifetime of the [Enclave]
+    /// instance, preventing the call of SGX functions after the [Enclave] has
+    /// been dropped.
     pub fn get_id(&self) -> Option<&sgx_enclave_id_t> {
         Option::from(&self.id)
     }
@@ -54,12 +61,15 @@ impl Enclave {
     /// Create the enclave
     ///
     /// Will talk to the SGX SDK to create the enclave.  Once the enclave has
-    /// been created then calls on the enclave can be made.  See `get_id()`
+    /// been created then calls on the enclave can be made.  See
+    /// [Enclave::get_id()]
     ///
     /// # Returns
     ///
-    /// `SUCCESS` when the enclave is created successfully.  See
-    /// https://download.01.org/intel-sgx/sgx-dcap/1.13/linux/docs/Intel_SGX_Enclave_Common_Loader_API_Reference.pdf
+    /// [_status_t_SGX_SUCCESS] when the enclave is created successfully.
+    ///
+    /// See
+    /// <https://download.01.org/intel-sgx/sgx-dcap/1.13/linux/docs/Intel_SGX_Enclave_Common_Loader_API_Reference.pdf>
     /// for error codes and their meaning.
     pub fn create(&mut self) -> sgx_status_t {
         let mut launch_token: sgx_launch_token_t = [0; 1024];
@@ -85,6 +95,8 @@ impl Enclave {
 }
 
 impl Drop for Enclave {
+    /// Destroys the enclave through the SGX interface.  The ID from
+    /// [Enclave::get_id()] is no longer valid after dropping.
     fn drop(&mut self) {
         if let Some(id) = self.id {
             // Per the docs, this will only return SGX_SUCCESS or
