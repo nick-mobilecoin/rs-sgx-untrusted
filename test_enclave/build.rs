@@ -27,14 +27,14 @@ const ENCLAVE_CONFIG: &str = "src/config.xml";
 
 fn main() {
     let root_dir = root_dir();
-    let edger_files = create_enclave_definitions(root_dir.join(EDGER_FILE));
+    let edger_files = build_enclave_definitions(root_dir.join(EDGER_FILE));
 
-    create_enclave_binary([root_dir.join(ENCLAVE_FILE), edger_files.trusted]);
-    create_untrusted_library(&edger_files.untrusted);
+    build_enclave_binary([root_dir.join(ENCLAVE_FILE), edger_files.trusted]);
+    build_untrusted_library(&edger_files.untrusted);
 
     let mut untrusted_header = edger_files.untrusted.clone();
     untrusted_header.set_extension("h");
-    create_untrusted_bindings(untrusted_header);
+    build_untrusted_bindings(untrusted_header);
 }
 
 /// Provide the base path for the Intel SGX SDK.  Will use the environment
@@ -62,7 +62,7 @@ fn ld_linker() -> String{
     env::var("LD").unwrap_or_else(|_| String::from("ld"))
 }
 
-/// Create the C files for the enclave definitions.  This creates both the
+/// Create the C files for the enclave definitions.  This builds both the
 /// trusted and the untrusted files.
 ///
 /// # Arguments
@@ -71,7 +71,7 @@ fn ld_linker() -> String{
 ///
 /// # Returns
 /// The full path to resultant C files for the enclave definition
-fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
+fn build_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
     rerun_if_changed!(edl_file.as_ref().as_os_str().to_str().expect("Invalid UTF-8 in edl path"));
 
     let mut command = Command::new(&format!("{}/bin/x64/sgx_edger8r", sgx_library_path()));
@@ -99,7 +99,7 @@ fn create_enclave_definitions<P: AsRef<Path>>(edl_file: P) -> EdgerFiles {
 /// # Returns
 /// The full path to resultant binary file.  This binary will be signed and
 /// ready for use in `sgx_create_enclave()`.
-fn create_enclave_binary<P>(files: P) -> PathBuf
+fn build_enclave_binary<P>(files: P) -> PathBuf
     where
         P: IntoIterator,
         P: Clone,
@@ -109,7 +109,7 @@ fn create_enclave_binary<P>(files: P) -> PathBuf
         rerun_if_changed!(file.as_ref().as_os_str().to_str().expect("Invalid UTF-8 in enclave c file"));
     }
 
-    // This `Build` creates a static library.  If we don't omit the
+    // This `Build` builds a static library.  If we don't omit the
     // `cargo_metadata` then this static library will be linked into
     // the consuming crate. The enclave binary is meant to be a stand alone,
     // so we do *not* want to link into the consuming crate.
@@ -122,7 +122,7 @@ fn create_enclave_binary<P>(files: P) -> PathBuf
         .cargo_metadata(false) .shared_flag(true).compile("enclave");
 
     let static_enclave = out_dir().join("libenclave.a");
-    let dynamic_enclave = create_dynamic_enclave_binary(static_enclave);
+    let dynamic_enclave = build_dynamic_enclave_binary(static_enclave);
     sign_enclave_binary(dynamic_enclave)
 }
 
@@ -137,7 +137,7 @@ fn create_enclave_binary<P>(files: P) -> PathBuf
 ///
 /// # Returns
 /// The full path to resultant shared library file.
-fn create_dynamic_enclave_binary<P: AsRef<Path>>(static_enclave: P) -> PathBuf {
+fn build_dynamic_enclave_binary<P: AsRef<Path>>(static_enclave: P) -> PathBuf {
     let mut dynamic_enclave = PathBuf::from(static_enclave.as_ref());
     dynamic_enclave.set_extension("so");
 
@@ -213,7 +213,7 @@ fn sign_enclave_binary<P: AsRef<Path>>(unsigned_enclave: P) -> PathBuf {
 ///
 /// # Returns
 /// The full path to resultant untrusted library.
-fn create_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
+fn build_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
 
     Build::new().file(untrusted_file)
         .include(format!("{}/include", sgx_library_path()))
@@ -234,7 +234,7 @@ fn create_untrusted_library<P: AsRef<Path>>(untrusted_file: P) -> PathBuf {
 /// # Arguments
 ///
 /// * `header` - The untrusted header file generated from edger8
-fn create_untrusted_bindings<P: AsRef<Path>>(header: P) {
+fn build_untrusted_bindings<P: AsRef<Path>>(header: P) {
     let bindings = bindgen::Builder::default()
         .header(header.as_ref().to_str().unwrap())
         .clang_arg(format!("-I{}/include", sgx_library_path()))

@@ -1,6 +1,6 @@
 # Untrusted SGX rust bindings
 
-Provides rust bindings for creating (`sgx_create_enclave()`) and persisting SGX enclaves.
+Provides a rust interface for creating (`sgx_create_enclave()`) and persisting SGX enclaves.
 
 Example usage:
 ```rust
