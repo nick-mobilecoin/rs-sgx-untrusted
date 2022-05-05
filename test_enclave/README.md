@@ -3,8 +3,8 @@
 Provides a simple enclave that can be used to exercise the SGX SDK for creating an enclave and for calling into
 functions in the enclave.
 
-This test enclave only works in simulation mode and is meant for used with `cargo test` or similar. Moving the enclave
-binary itself will result in test failures as `test_enclave::ENCLAVE` relies on the built location.
+This test enclave only works in simulation mode and is meant for use with `cargo test` or similar. Moving the enclave
+binary itself will result in test failures as `test_enclave::ENCLAVE` relies on the built location. 
 
 This crate can be added to the development dependency of the crate to test the creation of enclaves with.
 

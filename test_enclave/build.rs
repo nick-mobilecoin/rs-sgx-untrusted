@@ -239,8 +239,13 @@ fn build_untrusted_bindings<P: AsRef<Path>>(header: P) {
         .header(header.as_ref().to_str().unwrap())
         .clang_arg(format!("-I{}/include", sgx_library_path()))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        // See https://github.com/rust-lang/rust-bindgen/issues/1651 for disabling tests
+        // See https://github.com/rust-lang/rust-bindgen/issues/1651 for
+        // disabling tests
         .layout_tests(false)
+        // There are some 128 bit functions in the untrusted bindings which
+        // cause FFIwarnings in rust, so we limit to the functions we need.
+        .allowlist_function("ecall_.*")
+        .allowlist_function("sgx_.*")
         .generate()
         .expect("Unable to generate bindings");
 

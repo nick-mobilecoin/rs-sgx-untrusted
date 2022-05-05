@@ -12,12 +12,12 @@ fn sgx_library_path() -> String{
 }
 
 fn sgx_library_suffix() -> String{
-    let mode = env::var("SGX_MODE").unwrap_or_else(|_| String::from("SIM"));
+    let mode = env::var("SGX_MODE").unwrap_or_else(|_| String::from("SW"));
     let suffix = match mode.as_str() {
-       "SIM" => "_sim",
+       "SW" => "_sim",
        "HW" => "",
        mode => {
-           warning!("'SGX_MODE' was set to '{}'\n.Should be one of 'SIM' or 'HW', defaulting to 'SIM'", mode);
+           warning!("'SGX_MODE' was set to '{}'. Should be one of 'SW' or 'HW', defaulting to 'SW'", mode);
            "_sim"
        },
 
