@@ -245,7 +245,6 @@ fn build_untrusted_bindings<P: AsRef<Path>>(header: P) {
         // There are some 128 bit functions in the untrusted bindings which
         // cause FFIwarnings in rust, so we limit to the functions we need.
         .allowlist_function("ecall_.*")
-        .allowlist_function("sgx_.*")
         .generate()
         .expect("Unable to generate bindings");
 

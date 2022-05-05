@@ -31,8 +31,8 @@ cargo `--release` flag to build with optimizations.
 
 The [Intel SGX SDK](#intel-sgx-sdk) needs to be installed.
 
-The environment variable `SGX_MODE` controls whether to build for SGX simulation or hardware. The valid values are `SIM`
-and `HW` respectively.  When unset will default to simulation.
+The environment variable `SGX_MODE` controls whether to build for SGX software simulation or hardware. The valid values
+are `SW` and `HW` respectively.  When unset will default to software simulation.
 
 ## Intel SGX SDK
 
